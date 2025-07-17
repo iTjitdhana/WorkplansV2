@@ -56,7 +56,7 @@ export default function MedicalAppointmentDashboard() {
   }
 
   // ฟังก์ชันฟอร์แมตเวลา
-  const formatTime = (timeString) => {
+  const formatTime = (timeString: string) => {
     if (!timeString) return '-'
     
     // ถ้าเป็น timestamp หรือ datetime
