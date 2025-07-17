@@ -1,0 +1,623 @@
+"use client"
+
+import { useState, useEffect, useRef } from "react"
+import { Calendar, Clock, Search, User, Plus, Eye, Edit, Trash2 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
+
+export default function MedicalAppointmentDashboard() {
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const today = new Date()
+    return today.toISOString().split('T')[0] // รูปแบบ YYYY-MM-DD
+  })
+  const [searchTerm, setSearchTerm] = useState("")
+  const [workPlans, setWorkPlans] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  
+  // เพิ่ม state สำหรับค้นหางานผลิต
+  const [searchResults, setSearchResults] = useState([])
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [showSearchResults, setShowSearchResults] = useState(false)
+  const [selectedJob, setSelectedJob] = useState(null)
+  const searchRef = useRef(null)
+  
+  // เพิ่ม state สำหรับเวลา
+  const [startTime, setStartTime] = useState("08:00")
+  const [endTime, setEndTime] = useState("17:00")
+  
+  // เพิ่ม state สำหรับผู้ใช้
+  const [users, setUsers] = useState([])
+  const [usersLoading, setUsersLoading] = useState(false)
+  
+  // เพิ่ม state สำหรับผู้ปฏิบัติงาน
+  const [selectedOperators, setSelectedOperators] = useState(['none', 'none', 'none', 'none'])
+
+  // ฟังก์ชันดึงข้อมูลผู้ใช้
+  const fetchUsers = async () => {
+    setUsersLoading(true)
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3007'
+      const res = await fetch(`${apiUrl}/api/users`)
+      const data = await res.json()
+      if (data.success) {
+        setUsers(data.data)
+      }
+    } catch (err) {
+      console.error('Error fetching users:', err)
+    }
+    setUsersLoading(false)
+  }
+
+  // ฟังก์ชันฟอร์แมตเวลา
+  const formatTime = (timeString) => {
+    if (!timeString) return '-'
+    
+    // ถ้าเป็น timestamp หรือ datetime
+    if (timeString.includes('T') || timeString.includes(' ')) {
+      const date = new Date(timeString)
+      return date.toLocaleTimeString('th-TH', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: false 
+      })
+    }
+    
+    // ถ้าเป็น string เวลาแล้ว
+    return timeString
+  }
+
+  // ฟังก์ชันฟอร์แมตวันที่
+  const formatDate = (dateString) => {
+    if (!dateString) return '-'
+    
+    // ถ้าเป็น timestamp หรือ datetime
+    if (dateString.includes('T') || dateString.includes(' ')) {
+      const date = new Date(dateString)
+      // ใช้ toLocaleDateString เพื่อหลีกเลี่ยง timezone issues
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    }
+    
+    // ถ้าเป็น string วันที่แล้ว
+    return dateString
+  }
+
+  // ฟังก์ชันตรวจสอบรูปแบบเวลา
+  const validateTimeFormat = (time) => {
+    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/
+    return timeRegex.test(time)
+  }
+
+  // ฟังก์ชันจัดการ input เวลา
+  const handleTimeChange = (value, setTimeFunction) => {
+    // อนุญาตให้พิมพ์ได้ทุกอย่างขณะกำลังพิมพ์
+    setTimeFunction(value)
+  }
+
+  // ปิด dropdown เมื่อคลิกข้างนอก
+  useEffect(() => {
+    const handleClickOutside = (event: any) => {
+      if (searchRef.current && !searchRef.current.contains(event.target)) {
+        setShowSearchResults(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // ฟังก์ชันค้นหางานผลิต
+  const searchJobs = async (query) => {
+    if (!query || query.length < 2) {
+      setSearchResults([])
+      setShowSearchResults(false)
+      return
+    }
+
+    setSearchLoading(true)
+    try {
+      const res = await fetch(`http://localhost:3007/api/process-steps/search?query=${encodeURIComponent(query)}`)
+      const data = await res.json()
+      if (data.success) {
+        setSearchResults(data.data)
+        setShowSearchResults(true)
+      }
+    } catch (err) {
+      console.error('Error searching jobs:', err)
+    }
+    setSearchLoading(false)
+  }
+
+  // ฟังก์ชันเลือกงาน
+  const selectJob = (job) => {
+    setSelectedJob(job)
+    setSearchTerm(job.job_name)
+    setShowSearchResults(false)
+  }
+
+  // ฟังก์ชัน handle search input change
+  const handleSearchChange = (e) => {
+    const value = e.target.value
+    setSearchTerm(value)
+    setSelectedJob(null)
+    
+    if (value.length >= 2) {
+      searchJobs(value)
+    } else {
+      setSearchResults([])
+      setShowSearchResults(false)
+    }
+  }
+
+  // ฟังก์ชันจัดการการเลือกผู้ปฏิบัติงาน
+  const handleOperatorChange = (position: number, value: string) => {
+    const newOperators = [...selectedOperators]
+    newOperators[position - 1] = value
+    setSelectedOperators(newOperators)
+  }
+
+  useEffect(() => {
+    const fetchWorkPlans = async () => {
+      setLoading(true)
+      setError("")
+      try {
+        // เปลี่ยน URL ให้ตรงกับ backend ของคุณ
+        const res = await fetch(`http://localhost:3007/api/work-plans?date=${selectedDate}`)
+        const data = await res.json()
+        if (data.success) {
+          setWorkPlans(data.data)
+        } else {
+          setError("ไม่สามารถดึงข้อมูลแผนการผลิตได้")
+        }
+      } catch (err) {
+        setError("เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์")
+      }
+      setLoading(false)
+    }
+    fetchWorkPlans()
+  }, [selectedDate])
+
+  // ดึงข้อมูลผู้ใช้เมื่อ component โหลด
+  useEffect(() => {
+    fetchUsers()
+  }, [])
+
+  // ฟังก์ชันบันทึกข้อมูล
+  const handleSubmit = async () => {
+    if (!selectedJob) {
+      alert('กรุณาเลือกงานที่ต้องการผลิต')
+      return
+    }
+
+    if (!validateTimeFormat(startTime) || !validateTimeFormat(endTime)) {
+      alert('กรุณาใส่รูปแบบเวลาที่ถูกต้อง')
+      return
+    }
+
+    try {
+      // เตรียมข้อมูลผู้ปฏิบัติงาน
+      const operators = selectedOperators
+        .filter(operator => operator !== 'none') // กรองเฉพาะผู้ปฏิบัติงานที่เลือก
+        .map(operator => ({ id_code: operator }))
+
+      const workPlanData = {
+        production_date: selectedDate,
+        job_code: selectedJob.job_code,
+        job_name: selectedJob.job_name,
+        start_time: startTime + ':00', // เพิ่ม :00 เพื่อให้เป็น HH:MM:SS
+        end_time: endTime + ':00',
+        operators: operators
+      }
+
+      const response = await fetch('http://localhost:3007/api/work-plans', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(workPlanData)
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        alert('บันทึกข้อมูลสำเร็จ')
+        // รีเซ็ตฟอร์ม
+        setSelectedJob(null)
+        setSearchTerm('')
+        setStartTime('08:00')
+        setEndTime('17:00')
+        setSelectedOperators(['none', 'none', 'none', 'none'])
+        // รีเฟรชข้อมูล
+        const res = await fetch(`http://localhost:3007/api/work-plans?date=${selectedDate}`)
+        const refreshData = await res.json()
+        if (refreshData.success) {
+          setWorkPlans(refreshData.data)
+        }
+      } else {
+        alert('เกิดข้อผิดพลาด: ' + data.message)
+      }
+    } catch (error) {
+      console.error('Error saving work plan:', error)
+      alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล')
+    }
+  }
+
+  // ฟังก์ชันลบงาน
+  const handleDelete = async (workPlanId) => {
+    if (!confirm('คุณต้องการลบงานนี้หรือไม่?')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`http://localhost:3007/api/work-plans/${workPlanId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        alert('ลบงานสำเร็จ')
+        // รีเฟรชข้อมูล
+        const res = await fetch(`http://localhost:3007/api/work-plans?date=${selectedDate}`)
+        const refreshData = await res.json()
+        if (refreshData.success) {
+          setWorkPlans(refreshData.data)
+        }
+      } else {
+        alert('เกิดข้อผิดพลาด: ' + data.message)
+      }
+    } catch (error) {
+      console.error('Error deleting work plan:', error)
+      alert('เกิดข้อผิดพลาดในการลบงาน')
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-green-50/30">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
+                <Calendar className="w-5 h-5 text-white" />
+              </div>
+              <h1 className="text-xl font-semibold text-gray-900">ระบบจัดการแผนการผลิตครัวกลาง</h1>
+            </div>
+            <div className="flex items-center space-x-4">
+              <span className="text-sm text-gray-600">ระบบจัดการข้อมูล</span>
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-700">ผู้ใช้: Admin</span>
+                <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center">
+                  <span className="text-white text-sm font-medium">A</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+          {/* Left Panel - Schedule Form */}
+          <Card className="shadow-sm bg-white/80 backdrop-blur-sm lg:col-span-2">
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center space-x-2 text-lg">
+                <User className="w-5 h-5 text-green-600" />
+                <span>เพิ่มงานที่ต้องการผลิต</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Date Selection */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700">วันที่ผลิต</Label>
+                <div className="relative">
+                  <Input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="pl-10"
+                  />
+                  <Calendar className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                </div>
+              </div>
+
+              {/* Job Search */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700">เพิ่มงานผลิต</Label>
+                <div className="relative" ref={searchRef}>
+                  <Input
+                    placeholder="ค้นหาชื่องานผลิต หรือรหัสงาน..."
+                    value={searchTerm}
+                    onChange={handleSearchChange}
+                    className="pl-10"
+                  />
+                  <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                  
+                  {/* Search Results Dropdown */}
+                  {showSearchResults && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                      {searchLoading ? (
+                        <div className="p-3 text-center text-gray-500">กำลังค้นหา...</div>
+                      ) : searchResults.length > 0 ? (
+                        searchResults.map((job: any) => (
+                          <div
+                            key={job.job_code}
+                            className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                            onClick={() => selectJob(job)}
+                          >
+                            <div className="font-medium text-gray-900">{job.job_name}</div>
+                            <div className="text-sm text-gray-500">รหัส: {job.job_code}</div>
+                          </div>
+                        ))
+                      ) : searchTerm.length >= 2 ? (
+                        <div className="p-3 text-center text-gray-500">ไม่พบงานที่ค้นหา</div>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+                
+                {/* Selected Job Display */}
+                {selectedJob && (
+                  <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-md">
+                    <div className="text-sm font-medium text-green-800">งานที่เลือก: {selectedJob.job_name}</div>
+                    <div className="text-xs text-green-600">รหัส: {selectedJob.job_code}</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Staff Positions */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium text-gray-700">ผู้ปฏิบัติงาน (1-4 คน)</Label>
+                  <Button 
+                    variant="link" 
+                    size="sm" 
+                    className="text-green-600 p-0 h-auto"
+                    onClick={() => setSelectedOperators(['none', 'none', 'none', 'none'])}
+                  >
+                    ล้างข้อมูลทั้งหมด
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {[1, 2, 3, 4].map((position) => (
+                    <div key={position} className="space-y-2">
+                      <Label className="text-xs text-gray-600">ผู้ปฏิบัติงาน {position}</Label>
+                      <Select 
+                        value={selectedOperators[position - 1]} 
+                        onValueChange={(value) => handleOperatorChange(position, value)}
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder="เลือกผู้ปฏิบัติงาน" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">ไม่เลือก</SelectItem>
+                          {usersLoading ? (
+                            <SelectItem value="loading" disabled>กำลังโหลด...</SelectItem>
+                          ) : users.length > 0 ? (
+                            users.map((user) => (
+                              <SelectItem key={user.id} value={user.id_code}>
+                                {user.name} ({user.id_code})
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <SelectItem value="no-data" disabled>ไม่พบข้อมูลผู้ใช้</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Time Slots */}
+              <div className="space-y-4">
+                <Label className="text-sm font-medium text-gray-700">เครื่องบันทึกข้อมูลการผลิต</Label>
+                <Select>
+                  <SelectTrigger>
+                    <SelectValue placeholder="เลือกเครื่องที่ใช้..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="machine2">NEC-01</SelectItem>
+                    <SelectItem value="machine1">iPad-01</SelectItem>
+                    <SelectItem value="machine2">FUJI-01</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Time Range */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-gray-700">เวลาเริ่ม</Label>
+                  <div className="relative">
+                    <Input 
+                      type="text" 
+                      value={startTime}
+                      onChange={(e) => handleTimeChange(e.target.value, setStartTime)}
+                      placeholder="เช่น 9:00, 10:30"
+                      className="pl-10" 
+                    />
+                    <Clock className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                  </div>
+                  <p className="text-xs text-gray-500">รูปแบบ: ชั่วโมง:นาที (เช่น 9:00, 10:30, 14:45)</p>
+                  {startTime && !validateTimeFormat(startTime) && (
+                    <p className="text-xs text-red-500">รูปแบบเวลาไม่ถูกต้อง</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-gray-700">เวลาสิ้นสุด</Label>
+                  <div className="relative">
+                    <Input 
+                      type="text" 
+                      value={endTime}
+                      onChange={(e) => handleTimeChange(e.target.value, setEndTime)}
+                      placeholder="เช่น 17:00, 18:30"
+                      className="pl-10" 
+                    />
+                    <Clock className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                  </div>
+                  <p className="text-xs text-gray-500">รูปแบบ: ชั่วโมง:นาที (เช่น 17:00, 18:30, 20:15)</p>
+                  {endTime && !validateTimeFormat(endTime) && (
+                    <p className="text-xs text-red-500">รูปแบบเวลาไม่ถูกต้อง</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Location */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700">ห้องผลิต</Label>
+                <Select>
+                  <SelectTrigger>
+                    <SelectValue placeholder="เลือกห้องผลิต..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="room1">ห้อง 1</SelectItem>
+                    <SelectItem value="room2">ห้อง 2</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Notes */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700">หมายเหตุ</Label>
+                <Textarea placeholder="เพิ่มหมายเหตุเพิ่มเติมสำหรับการผลิต..." className="min-h-[80px] resize-none" />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700">ห้องผลิต</Label>
+                <Select>
+                  <SelectTrigger>
+                    <SelectValue placeholder="เลือกห้องผลิต..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="room1">ห้อง 1</SelectItem>
+                    <SelectItem value="room2">ห้อง 2</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Submit Button */}
+              <div className="pt-4">
+                <Button 
+                  onClick={handleSubmit}
+                  className="w-full bg-green-700 hover:bg-green-800 text-white"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  บันทึกข้อมูล
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Right Panel - Schedule View */}
+          <Card className="shadow-sm bg-white/80 backdrop-blur-sm lg:col-span-3">
+            <CardHeader className="pb-4">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center space-x-2 text-lg">
+                  <Calendar className="w-5 h-5 text-green-600" />
+                  <span>รายการแผนผลิต</span>
+                </CardTitle>
+                <div className="flex items-center space-x-2">
+                  <Input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="w-auto"
+                  />
+                  <Badge variant="secondary" className="bg-green-50 text-green-700">
+                    ใหม่
+                  </Badge>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Schedule Header */}
+                <div className="flex justify-between items-center text-sm text-gray-600">
+                  <span>รายวัน</span>
+                  <span>รายสัปดาห์</span>
+                </div>
+
+                <Separator />
+
+                {loading ? (
+                  <div className="text-center py-8 text-gray-500">กำลังโหลดข้อมูล...</div>
+                ) : error ? (
+                  <div className="text-center py-8 text-red-500">{error}</div>
+                ) : workPlans.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Calendar className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                    <p className="text-sm">ไม่มีการนัดหมายเพิ่มเติมในวันนี้</p>
+                  </div>
+                ) : (
+                  workPlans.map((plan) => (
+                    <div key={plan.id} className="border-l-4 border-l-green-400 bg-green-50 p-4 rounded-r-lg">
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <h3 className="font-bold text-gray-900">{plan.job_name}</h3>
+                            <Badge className="text-xs">
+                              รหัส: {plan.job_code}
+                            </Badge>
+                            {plan.is_finished ? (
+                              <Badge className="text-xs bg-green-200 text-green-800">เสร็จสิ้น</Badge>
+                            ) : (
+                              <Badge className="text-xs bg-yellow-100 text-yellow-800">รอดำเนินการ</Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center space-x-4 text-sm text-gray-600">
+                            <div className="flex items-center space-x-1">
+                              <span>ผู้ปฏิบัติงาน: {plan.operators || '-'}</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2 text-sm">
+                            <Clock className="w-4 h-4 text-gray-400" />
+                            <span className="text-gray-600">{formatTime(plan.start_time)} - {formatTime(plan.end_time)}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Button variant="ghost" size="sm" className="text-green-600">
+                            <span className="text-xs">บันทึกแบบร่าง</span>
+                          </Button>
+                          <div className="flex space-x-1">
+                            <Button variant="ghost" size="icon" className="w-8 h-8">
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="w-8 h-8">
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="w-8 h-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => handleDelete(plan.id)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  )
+}
