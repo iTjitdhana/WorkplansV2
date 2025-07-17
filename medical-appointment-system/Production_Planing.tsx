@@ -11,41 +11,77 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 
-export default function MedicalAppointmentDashboard() {
-  const [selectedDate, setSelectedDate] = useState(() => {
-    const today = new Date()
-    return today.toISOString().split('T')[0] // รูปแบบ YYYY-MM-DD
-  })
-  const [searchTerm, setSearchTerm] = useState("")
-  const [workPlans, setWorkPlans] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
-  
-  // เพิ่ม state สำหรับค้นหางานผลิต
-  const [searchResults, setSearchResults] = useState([])
-  const [searchLoading, setSearchLoading] = useState(false)
-  const [showSearchResults, setShowSearchResults] = useState(false)
-  const [selectedJob, setSelectedJob] = useState(null)
-  const searchRef = useRef(null)
-  
-  // เพิ่ม state สำหรับเวลา
-  const [startTime, setStartTime] = useState("08:00")
-  const [endTime, setEndTime] = useState("17:00")
-  
-  // เพิ่ม state สำหรับผู้ใช้
-  const [users, setUsers] = useState([])
-  const [usersLoading, setUsersLoading] = useState(false)
-  
-  // เพิ่ม state สำหรับผู้ปฏิบัติงาน
-  const [selectedOperators, setSelectedOperators] = useState(['none', 'none', 'none', 'none'])
+// Type definitions
+interface WorkPlan {
+  id: string
+  job_name: string
+  job_code: string
+  start_time: string
+  end_time: string
+  operators: string
+  is_finished: boolean
+  production_date?: string
+}
 
-  // ฟังก์ชันดึงข้อมูลผู้ใช้
+interface User {
+  id: string
+  id_code: string
+  name: string
+}
+
+interface Job {
+  job_code: string
+  job_name: string
+}
+
+interface ApiResponse<T> {
+  success: boolean
+  data: T
+  message?: string
+}
+
+export default function MedicalAppointmentDashboard() {
+  // Get API URL from environment or use default
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3007'
+
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    const today = new Date()
+    return today.toISOString().split('T')[0]
+  })
+  const [searchTerm, setSearchTerm] = useState<string>("")
+  const [workPlans, setWorkPlans] = useState<WorkPlan[]>([])
+  const [loading, setLoading] = useState<boolean>(false)
+  const [error, setError] = useState<string>("")
+  
+  // State for job search
+  const [searchResults, setSearchResults] = useState<Job[]>([])
+  const [searchLoading, setSearchLoading] = useState<boolean>(false)
+  const [showSearchResults, setShowSearchResults] = useState<boolean>(false)
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null)
+  const searchRef = useRef<HTMLDivElement>(null)
+  
+  // State for time
+  const [startTime, setStartTime] = useState<string>("08:00")
+  const [endTime, setEndTime] = useState<string>("17:00")
+  
+  // State for users
+  const [users, setUsers] = useState<User[]>([])
+  const [usersLoading, setUsersLoading] = useState<boolean>(false)
+  
+  // State for operators
+  const [selectedOperators, setSelectedOperators] = useState<string[]>(['none', 'none', 'none', 'none'])
+  
+  // State for room and machine
+  const [selectedRoom, setSelectedRoom] = useState<string>("")
+  const [selectedMachine, setSelectedMachine] = useState<string>("")
+  const [notes, setNotes] = useState<string>("")
+
+  // Function to fetch users
   const fetchUsers = async () => {
     setUsersLoading(true)
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3007'
-      const res = await fetch(`${apiUrl}/api/users`)
-      const data = await res.json()
+      const res = await fetch(`${API_URL}/api/users`)
+      const data: ApiResponse<User[]> = await res.json()
       if (data.success) {
         setUsers(data.data)
       }
@@ -55,58 +91,66 @@ export default function MedicalAppointmentDashboard() {
     setUsersLoading(false)
   }
 
-  // ฟังก์ชันฟอร์แมตเวลา
-  const formatTime = (timeString: string) => {
+  // Function to format time
+  const formatTime = (timeString: string): string => {
     if (!timeString) return '-'
     
-    // ถ้าเป็น timestamp หรือ datetime
-    if (timeString.includes('T') || timeString.includes(' ')) {
-      const date = new Date(timeString)
-      return date.toLocaleTimeString('th-TH', { 
-        hour: '2-digit', 
-        minute: '2-digit',
-        hour12: false 
-      })
+    try {
+      if (timeString.includes('T') || timeString.includes(' ')) {
+        const date = new Date(timeString)
+        if (isNaN(date.getTime())) return timeString
+        
+        return date.toLocaleTimeString('th-TH', { 
+          hour: '2-digit', 
+          minute: '2-digit',
+          hour12: false 
+        })
+      }
+    } catch (error) {
+      console.error('Error formatting time:', error)
+      return timeString
     }
     
-    // ถ้าเป็น string เวลาแล้ว
     return timeString
   }
 
-  // ฟังก์ชันฟอร์แมตวันที่
-  const formatDate = (dateString) => {
+  // Function to format date
+  const formatDate = (dateString: string): string => {
     if (!dateString) return '-'
     
-    // ถ้าเป็น timestamp หรือ datetime
-    if (dateString.includes('T') || dateString.includes(' ')) {
-      const date = new Date(dateString)
-      // ใช้ toLocaleDateString เพื่อหลีกเลี่ยง timezone issues
-      const year = date.getFullYear()
-      const month = String(date.getMonth() + 1).padStart(2, '0')
-      const day = String(date.getDate()).padStart(2, '0')
-      return `${year}-${month}-${day}`
+    try {
+      if (dateString.includes('T') || dateString.includes(' ')) {
+        const date = new Date(dateString)
+        if (isNaN(date.getTime())) return dateString
+        
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+      }
+    } catch (error) {
+      console.error('Error formatting date:', error)
+      return dateString
     }
     
-    // ถ้าเป็น string วันที่แล้ว
     return dateString
   }
 
-  // ฟังก์ชันตรวจสอบรูปแบบเวลา
-  const validateTimeFormat = (time) => {
+  // Function to validate time format
+  const validateTimeFormat = (time: string): boolean => {
     const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/
     return timeRegex.test(time)
   }
 
-  // ฟังก์ชันจัดการ input เวลา
-  const handleTimeChange = (value, setTimeFunction) => {
-    // อนุญาตให้พิมพ์ได้ทุกอย่างขณะกำลังพิมพ์
+  // Function to handle time change
+  const handleTimeChange = (value: string, setTimeFunction: (value: string) => void) => {
     setTimeFunction(value)
   }
 
-  // ปิด dropdown เมื่อคลิกข้างนอก
+  // Close dropdown when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event: any) => {
-      if (searchRef.current && !searchRef.current.contains(event.target)) {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
         setShowSearchResults(false)
       }
     }
@@ -114,8 +158,8 @@ export default function MedicalAppointmentDashboard() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // ฟังก์ชันค้นหางานผลิต
-  const searchJobs = async (query) => {
+  // Function to search jobs
+  const searchJobs = async (query: string) => {
     if (!query || query.length < 2) {
       setSearchResults([])
       setShowSearchResults(false)
@@ -124,8 +168,8 @@ export default function MedicalAppointmentDashboard() {
 
     setSearchLoading(true)
     try {
-      const res = await fetch(`http://localhost:3007/api/process-steps/search?query=${encodeURIComponent(query)}`)
-      const data = await res.json()
+      const res = await fetch(`${API_URL}/api/process-steps/search?query=${encodeURIComponent(query)}`)
+      const data: ApiResponse<Job[]> = await res.json()
       if (data.success) {
         setSearchResults(data.data)
         setShowSearchResults(true)
@@ -136,15 +180,15 @@ export default function MedicalAppointmentDashboard() {
     setSearchLoading(false)
   }
 
-  // ฟังก์ชันเลือกงาน
-  const selectJob = (job) => {
+  // Function to select job
+  const selectJob = (job: Job) => {
     setSelectedJob(job)
     setSearchTerm(job.job_name)
     setShowSearchResults(false)
   }
 
-  // ฟังก์ชัน handle search input change
-  const handleSearchChange = (e) => {
+  // Handle search input change
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
     setSearchTerm(value)
     setSelectedJob(null)
@@ -157,21 +201,21 @@ export default function MedicalAppointmentDashboard() {
     }
   }
 
-  // ฟังก์ชันจัดการการเลือกผู้ปฏิบัติงาน
+  // Function to handle operator change
   const handleOperatorChange = (position: number, value: string) => {
     const newOperators = [...selectedOperators]
     newOperators[position - 1] = value
     setSelectedOperators(newOperators)
   }
 
+  // Fetch work plans
   useEffect(() => {
     const fetchWorkPlans = async () => {
       setLoading(true)
       setError("")
       try {
-        // เปลี่ยน URL ให้ตรงกับ backend ของคุณ
-        const res = await fetch(`http://localhost:3007/api/work-plans?date=${selectedDate}`)
-        const data = await res.json()
+        const res = await fetch(`${API_URL}/api/work-plans?date=${selectedDate}`)
+        const data: ApiResponse<WorkPlan[]> = await res.json()
         if (data.success) {
           setWorkPlans(data.data)
         } else {
@@ -183,14 +227,14 @@ export default function MedicalAppointmentDashboard() {
       setLoading(false)
     }
     fetchWorkPlans()
-  }, [selectedDate])
+  }, [selectedDate, API_URL])
 
-  // ดึงข้อมูลผู้ใช้เมื่อ component โหลด
+  // Fetch users on component mount
   useEffect(() => {
     fetchUsers()
   }, [])
 
-  // ฟังก์ชันบันทึกข้อมูล
+  // Function to save data
   const handleSubmit = async () => {
     if (!selectedJob) {
       alert('กรุณาเลือกงานที่ต้องการผลิต')
@@ -203,21 +247,23 @@ export default function MedicalAppointmentDashboard() {
     }
 
     try {
-      // เตรียมข้อมูลผู้ปฏิบัติงาน
       const operators = selectedOperators
-        .filter(operator => operator !== 'none') // กรองเฉพาะผู้ปฏิบัติงานที่เลือก
+        .filter(operator => operator !== 'none')
         .map(operator => ({ id_code: operator }))
 
       const workPlanData = {
         production_date: selectedDate,
         job_code: selectedJob.job_code,
         job_name: selectedJob.job_name,
-        start_time: startTime + ':00', // เพิ่ม :00 เพื่อให้เป็น HH:MM:SS
+        start_time: startTime + ':00',
         end_time: endTime + ':00',
-        operators: operators
+        operators: operators,
+        room: selectedRoom,
+        machine: selectedMachine,
+        notes: notes
       }
 
-      const response = await fetch('http://localhost:3007/api/work-plans', {
+      const response = await fetch(`${API_URL}/api/work-plans`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -225,19 +271,23 @@ export default function MedicalAppointmentDashboard() {
         body: JSON.stringify(workPlanData)
       })
 
-      const data = await response.json()
+      const data: ApiResponse<WorkPlan> = await response.json()
 
       if (data.success) {
         alert('บันทึกข้อมูลสำเร็จ')
-        // รีเซ็ตฟอร์ม
+        // Reset form
         setSelectedJob(null)
         setSearchTerm('')
         setStartTime('08:00')
         setEndTime('17:00')
         setSelectedOperators(['none', 'none', 'none', 'none'])
-        // รีเฟรชข้อมูล
-        const res = await fetch(`http://localhost:3007/api/work-plans?date=${selectedDate}`)
-        const refreshData = await res.json()
+        setSelectedRoom('')
+        setSelectedMachine('')
+        setNotes('')
+        
+        // Refresh data
+        const res = await fetch(`${API_URL}/api/work-plans?date=${selectedDate}`)
+        const refreshData: ApiResponse<WorkPlan[]> = await res.json()
         if (refreshData.success) {
           setWorkPlans(refreshData.data)
         }
@@ -250,27 +300,27 @@ export default function MedicalAppointmentDashboard() {
     }
   }
 
-  // ฟังก์ชันลบงาน
-  const handleDelete = async (workPlanId) => {
+  // Function to delete work plan
+  const handleDelete = async (workPlanId: string) => {
     if (!confirm('คุณต้องการลบงานนี้หรือไม่?')) {
       return
     }
 
     try {
-      const response = await fetch(`http://localhost:3007/api/work-plans/${workPlanId}`, {
+      const response = await fetch(`${API_URL}/api/work-plans/${workPlanId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
         }
       })
 
-      const data = await response.json()
+      const data: ApiResponse<null> = await response.json()
 
       if (data.success) {
         alert('ลบงานสำเร็จ')
-        // รีเฟรชข้อมูล
-        const res = await fetch(`http://localhost:3007/api/work-plans?date=${selectedDate}`)
-        const refreshData = await res.json()
+        // Refresh data
+        const res = await fetch(`${API_URL}/api/work-plans?date=${selectedDate}`)
+        const refreshData: ApiResponse<WorkPlan[]> = await res.json()
         if (refreshData.success) {
           setWorkPlans(refreshData.data)
         }
@@ -321,9 +371,10 @@ export default function MedicalAppointmentDashboard() {
             <CardContent className="space-y-6">
               {/* Date Selection */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">วันที่ผลิต</Label>
+                <Label htmlFor="production-date" className="text-sm font-medium text-gray-700">วันที่ผลิต</Label>
                 <div className="relative">
                   <Input
+                    id="production-date"
                     type="date"
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
@@ -335,9 +386,10 @@ export default function MedicalAppointmentDashboard() {
 
               {/* Job Search */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">เพิ่มงานผลิต</Label>
+                <Label htmlFor="job-search" className="text-sm font-medium text-gray-700">เพิ่มงานผลิต</Label>
                 <div className="relative" ref={searchRef}>
                   <Input
+                    id="job-search"
                     placeholder="ค้นหาชื่องานผลิต หรือรหัสงาน..."
                     value={searchTerm}
                     onChange={handleSearchChange}
@@ -351,7 +403,7 @@ export default function MedicalAppointmentDashboard() {
                       {searchLoading ? (
                         <div className="p-3 text-center text-gray-500">กำลังค้นหา...</div>
                       ) : searchResults.length > 0 ? (
-                        searchResults.map((job: any) => (
+                        searchResults.map((job) => (
                           <div
                             key={job.job_code}
                             className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
@@ -394,12 +446,14 @@ export default function MedicalAppointmentDashboard() {
                 <div className="grid grid-cols-2 gap-4">
                   {[1, 2, 3, 4].map((position) => (
                     <div key={position} className="space-y-2">
-                      <Label className="text-xs text-gray-600">ผู้ปฏิบัติงาน {position}</Label>
+                      <Label htmlFor={`operator-${position}`} className="text-xs text-gray-600">
+                        ผู้ปฏิบัติงาน {position}
+                      </Label>
                       <Select 
                         value={selectedOperators[position - 1]} 
                         onValueChange={(value) => handleOperatorChange(position, value)}
                       >
-                        <SelectTrigger className="h-9">
+                        <SelectTrigger id={`operator-${position}`} className="h-9">
                           <SelectValue placeholder="เลือกผู้ปฏิบัติงาน" />
                         </SelectTrigger>
                         <SelectContent>
@@ -422,17 +476,17 @@ export default function MedicalAppointmentDashboard() {
                 </div>
               </div>
 
-              {/* Time Slots */}
+              {/* Machine Selection */}
               <div className="space-y-4">
-                <Label className="text-sm font-medium text-gray-700">เครื่องบันทึกข้อมูลการผลิต</Label>
-                <Select>
-                  <SelectTrigger>
+                <Label htmlFor="machine" className="text-sm font-medium text-gray-700">เครื่องบันทึกข้อมูลการผลิต</Label>
+                <Select value={selectedMachine} onValueChange={setSelectedMachine}>
+                  <SelectTrigger id="machine">
                     <SelectValue placeholder="เลือกเครื่องที่ใช้..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="machine2">NEC-01</SelectItem>
-                    <SelectItem value="machine1">iPad-01</SelectItem>
-                    <SelectItem value="machine2">FUJI-01</SelectItem>
+                    <SelectItem value="nec01">NEC-01</SelectItem>
+                    <SelectItem value="ipad01">iPad-01</SelectItem>
+                    <SelectItem value="fuji01">FUJI-01</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -440,9 +494,10 @@ export default function MedicalAppointmentDashboard() {
               {/* Time Range */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-700">เวลาเริ่ม</Label>
+                  <Label htmlFor="start-time" className="text-sm font-medium text-gray-700">เวลาเริ่ม</Label>
                   <div className="relative">
                     <Input 
+                      id="start-time"
                       type="text" 
                       value={startTime}
                       onChange={(e) => handleTimeChange(e.target.value, setStartTime)}
@@ -458,9 +513,10 @@ export default function MedicalAppointmentDashboard() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-700">เวลาสิ้นสุด</Label>
+                  <Label htmlFor="end-time" className="text-sm font-medium text-gray-700">เวลาสิ้นสุด</Label>
                   <div className="relative">
                     <Input 
+                      id="end-time"
                       type="text" 
                       value={endTime}
                       onChange={(e) => handleTimeChange(e.target.value, setEndTime)}
@@ -478,9 +534,9 @@ export default function MedicalAppointmentDashboard() {
 
               {/* Location */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">ห้องผลิต</Label>
-                <Select>
-                  <SelectTrigger>
+                <Label htmlFor="room" className="text-sm font-medium text-gray-700">ห้องผลิต</Label>
+                <Select value={selectedRoom} onValueChange={setSelectedRoom}>
+                  <SelectTrigger id="room">
                     <SelectValue placeholder="เลือกห้องผลิต..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -492,21 +548,14 @@ export default function MedicalAppointmentDashboard() {
 
               {/* Notes */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">หมายเหตุ</Label>
-                <Textarea placeholder="เพิ่มหมายเหตุเพิ่มเติมสำหรับการผลิต..." className="min-h-[80px] resize-none" />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">ห้องผลิต</Label>
-                <Select>
-                  <SelectTrigger>
-                    <SelectValue placeholder="เลือกห้องผลิต..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="room1">ห้อง 1</SelectItem>
-                    <SelectItem value="room2">ห้อง 2</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="notes" className="text-sm font-medium text-gray-700">หมายเหตุ</Label>
+                <Textarea 
+                  id="notes"
+                  placeholder="เพิ่มหมายเหตุเพิ่มเติมสำหรับการผลิต..." 
+                  className="min-h-[80px] resize-none"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
               </div>
 
               {/* Submit Button */}
