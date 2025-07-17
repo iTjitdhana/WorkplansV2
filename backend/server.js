@@ -30,6 +30,7 @@ app.use(limiter);
 app.use(cors({
   origin: [
     'http://localhost:5000',
+    'http://192.168.0.161:5000',
     process.env.FRONTEND_URL
   ].filter(Boolean),
   credentials: true,
