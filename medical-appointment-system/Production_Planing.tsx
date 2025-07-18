@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Calendar, Clock, Search, User, Plus, Eye, Edit, Trash2 } from "lucide-react"
+import { Calendar, Clock, Search, User, Plus, Eye, Edit, Trash2, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 // Type definitions
 interface WorkPlan {
@@ -42,7 +43,7 @@ interface ApiResponse<T> {
 
 export default function MedicalAppointmentDashboard() {
   // Get API URL from environment or use default
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3007'
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.0.161:3007'
 
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     const today = new Date()
@@ -346,7 +347,23 @@ export default function MedicalAppointmentDashboard() {
               <h1 className="text-xl font-semibold text-gray-900">ระบบจัดการแผนการผลิตครัวกลาง</h1>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">ระบบจัดการข้อมูล</span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="text-sm text-gray-600 hover:bg-gray-100">
+                    ระบบจัดการข้อมูล
+                    <ChevronDown className="w-3 h-3 ml-1 text-gray-500" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem 
+                    onClick={() => window.open('http://192.168.0.93/tracker/index.html', '_blank')}
+                    className="cursor-pointer"
+                  >
+                    <User className="w-4 h-4 mr-2" />
+                    กระบวนการ
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <div className="flex items-center space-x-2">
                 <span className="text-sm text-gray-700">ผู้ใช้: Admin</span>
                 <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center">

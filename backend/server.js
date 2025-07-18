@@ -9,7 +9,7 @@ const routes = require('./routes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3007;
 
 // Security middleware
 app.use(helmet());
@@ -30,6 +30,7 @@ app.use(limiter);
 app.use(cors({
   origin: [
     'http://localhost:5000',
+    'http://192.168.0.94:5000',
     'http://192.168.0.161:5000',
     process.env.FRONTEND_URL
   ].filter(Boolean),
@@ -68,10 +69,11 @@ const startServer = async () => {
     // Test database connection
     await testConnection();
     
-    app.listen(PORT, () => {
+    app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Server is running on port ${PORT}`);
       console.log(`📱 Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`🔗 API URL: http://localhost:${PORT}/api`);
+      console.log(`🔗 API URL: http://192.168.0.94:${PORT}/api`);
+      console.log(`🔗 Local API URL: http://localhost:${PORT}/api`);
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);
